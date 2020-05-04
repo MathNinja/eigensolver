@@ -1,8 +1,10 @@
 import matplotlib
 import matplotlib.pyplot as plt
 import numpy as np
+import numpy.matlib
 import math
 from Config import Config
+from scipy import special
 
 class Eigensolver:
 
@@ -12,7 +14,10 @@ class Eigensolver:
 		self.Preliminaries()
 		self.R1()
 		self.R2()
-		self.Plots()
+		self.MeanFlow();
+		#self.Plots()
+		#self.PlotTheMeanFlow()
+		self.CreateComplexPlane()
 
 	def Configure(self):
 		self.config 			= Config()
@@ -65,6 +70,7 @@ class Eigensolver:
 	def R1(self):
 		x = self.x
 		R1 = 0.689 - np.power((0.055+1.131*np.power((1-x/2),2)),0.5)
+		
 		# Set negative entries equal to zero.
 		R1[ R1 < 0 ] = 0 
 		self.R1 = R1
@@ -73,6 +79,105 @@ class Eigensolver:
 		x = self.x		
 		self.R2 = 1.073-0.198*np.power((1-x/2),2) + 0.109*np.exp(-11*x/2)	
 	
+
+	def MeanFlow(self):
+		N = self.NNxx
+		F = self.F
+		E = self.E
+		R1 = self.R1
+		R2 = self.R2
+		maxit = self.maxit
+		tol = self.tol
+		dens0 = self.dens0
+		gamma = self.gamma	
+
+		D0 = np.zeros(shape=(N,),dtype=float)
+		U0 = np.zeros(shape=(N,),dtype=float)
+		C0 = np.zeros(shape=(N,),dtype=float)
+		d0 = np.zeros(shape=(maxit,),dtype=float)
+		d0[0] = dens0
+		
+		k = 0
+		while (k < N):
+			j = 0
+			beta = 0.5*math.pow(F,2)/math.pow((math.pow(R2[k],2)-math.pow(R1[k],2)),2);
+			while( j < maxit - 1 ):
+			
+				f = beta*math.pow(d0[j],-2) + (1/(gamma-1))*math.pow(d0[j],gamma-1) - E
+				df = -2*beta*math.pow(d0[j],-3)	+ math.pow(d0[j],gamma-2)
+
+				# Newton's Method	
+				d0[j+1] = d0[j] - f/df
+					
+				a = abs(d0[j+1]-d0[j])
+
+				if(a < tol):
+				 	#print("Great Success")
+				 	D0[k] = d0[j+1]
+				 	d0 = np.zeros(shape=(maxit,),dtype=float)
+				 	d0[0] = D0[k]
+				 	break
+				if(j==maxit-2):
+				 	print("Newton Algorithm Failed to Converge")	
+				j = j + 1	
+			
+			k=k+1
+
+		
+
+		U0denominator = np.power(R2,2) - np.power(R1,2)
+		U0denominator = U0denominator*np.multiply(D0,U0denominator)
+		
+		U0 = np.divide(F,U0denominator)
+		C0 = np.power(D0,(gamma-1)/2)
+		Mach0 = np.divide(U0,C0)
+		P0 = np.multiply(1/gamma,np.power(D0,gamma))
+
+		self.D0 = D0
+		self.U0 = U0
+		self.C0 = C0
+		self.Mach0 = Mach0
+		self.P0 = P0
+
+	def CreateComplexPlane(self):
+		mod_z_max = self.mod_z_max
+		n = self.n	
+		x = np.linspace(-mod_z_max,mod_z_max,n)	
+
+		real = np.zeros((n,n),dtype=complex)
+		real = np.matlib.repmat(x,n,1)
+		
+		imag = np.zeros((n,n),dtype=complex)
+		imag = np.transpose(real)
+		imag = np.multiply(1j,imag)
+		
+		comp = np.zeros((n,n),dtype=complex)
+		comp = real + imag 
+
+		self.ComplexPlane = comp
+
+	#def MultRootFindC(self):
+
+	def BesEqn(self,z,R1,R2):
+		maxit = self.maxit
+		tol = self.tol
+		gamma = self.gamma
+		m = self.m
+
+		J1 = special.jv(m, z*R1);
+		J1p1 = special.jv(m+1, z*R1);
+		J2 = special.jv(m, z*R2);
+		J2p1 = special.jv(m+1, z*R2);
+
+		if(R1 != 0):
+			Y1 = special.yv(m, z*R1);
+			Y1p1 = special.yv(m+1, z*R1);
+		
+		Y2 = special.yv(m, z*R2);
+		Y2p1 = special.yv(m+1, z*R2);
+
+
+
 	def Plots(self):
 		x = self.x
 		R1 = self.R1
@@ -90,6 +195,20 @@ class Eigensolver:
 		ax.grid()
 
 		fig.savefig("duct.png")
-		plt.show()	
+		plt.show()
+
+	def PlotTheMeanFlow(self):
+		x = self.x
+		U0 = self.U0
+		C0 = self.C0
+		Mach0 = self.Mach0
+		fig, ax = plt.subplots()
+		ax.plot(x, U0,linewidth=3)	
+		ax.plot(x, C0,linewidth=3)	
+		ax.plot(x, Mach0,linewidth=3)
+		ax.set(xlabel='$x$',title='Mean Flow')	
+
+		fig.savefig("MeanFlow.png")
+		plt.show()
 
 		

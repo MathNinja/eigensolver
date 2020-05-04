@@ -1,3 +1,5 @@
+import math   
+
 class Config:
 
 	def __init__(self):
@@ -12,10 +14,13 @@ class Config:
  	def MeanFlow(self):
 		
 		self.dens0 = 0.9		
+		
 		# Mass Flow Rate
 		self.F = 0.559
+		
 		# Needs changing depending on the problem geometry
 		self.E = 2.514
+		
 		# Ratio of specific heats for air
 		self.gamma = 1.4202              
 		self.dir_coeff = 1
@@ -30,7 +35,7 @@ class Config:
 	def Plots(self):
 
 		self.PlotTracedModes = 1
-		self.PlotDuct = 1
+		self.PlotDuct = 0
 		self.PlotMeanFlow = 0
 		self.PlotAlpha = 0
 		self.PlotMu = 0
@@ -49,7 +54,7 @@ class Config:
 	def Computations(self):	
 	
 		self.maxit = 100
-		self.tol = 10^(-6)
+		self.tol = math.pow(10,-6)
 
 	def ComplexPlane(self):
 
@@ -58,7 +63,7 @@ class Config:
 		self.mod_z_max = 3
 
 		# Used for the number of points in the complex plane
-		self.n = 40
+		self.n = 60
 
 
    	

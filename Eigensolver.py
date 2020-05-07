@@ -1,10 +1,12 @@
 import matplotlib
 import matplotlib.pyplot as plt
+import matplotlib.cm as cm
 import numpy as np
 import numpy.matlib
-import math
+import math, cmath
 from Config import Config
 from scipy import special
+
 
 class Eigensolver:
 
@@ -18,16 +20,19 @@ class Eigensolver:
 		#self.Plots()
 		#self.PlotTheMeanFlow()
 		self.CreateComplexPlane()
+		self.MultRootFindC()
 
 	def Configure(self):
+		
 		self.config 			= Config()
+		
 		self.dens0 				= self.config.dens0
 		self.F 					= self.config.F
 		self.E 					= self.config.E
 		self.gamma 				= self.config.gamma              
 		self.dir_coeff 			= self.config.dir_coeff
-		self.Z1 				= self.config.Z1
-		self.Z2 				= self.config.Z2
+		self.invZ1 				= self.config.invZ1
+		self.invZ2 				= self.config.invZ2
 		self.m 					= self.config.m
 		self.omega 				= self.config.omega
 		self.PlotTracedModes 	= self.config.PlotTracedModes
@@ -45,19 +50,16 @@ class Eigensolver:
 		self.tol 				= self.config.tol
 		self.mod_z_max 			= self.config.mod_z_max
 		self.n 					= self.config.n
+		self.xshift				=self.config.xshift
+		self.yshift				=self.config.yshift
 		self.xmin 				= self.config.xmin
 		self.xmax 				= self.config.xmax	
 	
 	def Preliminaries(self):
-		Z1 = self.Z1
-		Z2 = self.Z2
 		F  = self.F
 		xmin = self.xmin
 		xmax = self.xmax
 		NNxx = self.NNxx
-
-		self.invZ1 = 1/(Z1)
-		self.invZ2 = 1/(Z2)
 
 		# The increment/step for the initial modetracer (i.e., starting from F = 0)	
 		self.dF = np.sign(F)*(0.01)
@@ -70,9 +72,10 @@ class Eigensolver:
 	def R1(self):
 		x = self.x
 		R1 = 0.689 - np.power((0.055+1.131*np.power((1-x/2),2)),0.5)
-		
-		# Set negative entries equal to zero.
+		# # Set negative entries equal to zero.
 		R1[ R1 < 0 ] = 0 
+		#R1 [ R1 > 0] = 0 
+
 		self.R1 = R1
 
 	def R2(self):
@@ -112,13 +115,13 @@ class Eigensolver:
 				a = abs(d0[j+1]-d0[j])
 
 				if(a < tol):
-				 	#print("Great Success")
-				 	D0[k] = d0[j+1]
-				 	d0 = np.zeros(shape=(maxit,),dtype=float)
-				 	d0[0] = D0[k]
-				 	break
+					#print("Newton Algorithm Converged")
+					D0[k] = d0[j+1]
+					d0 = np.zeros(shape=(maxit,),dtype=float)
+					d0[0] = D0[k]
+					break
 				if(j==maxit-2):
-				 	print("Newton Algorithm Failed to Converge")	
+					print("Newton Algorithm Failed to Converge")	
 				j = j + 1	
 			
 			k=k+1
@@ -142,39 +145,351 @@ class Eigensolver:
 	def CreateComplexPlane(self):
 		mod_z_max = self.mod_z_max
 		n = self.n	
-		x = np.linspace(-mod_z_max,mod_z_max,n)	
+		xshift = self.xshift
+		yshift = self.yshift
 
-		real = np.zeros((n,n),dtype=complex)
+		x = np.linspace(-mod_z_max,mod_z_max,n)	+ xshift
 		real = np.matlib.repmat(x,n,1)
 		
-		imag = np.zeros((n,n),dtype=complex)
-		imag = np.transpose(real)
+		y = np.linspace(mod_z_max,-mod_z_max,n)	+ yshift
+		imag = np.matlib.repmat(y,n,1)
+
+		imag = np.transpose(imag)
 		imag = np.multiply(1j,imag)
+		#print imag
+		#exit()
 		
 		comp = np.zeros((n,n),dtype=complex)
 		comp = real + imag 
 
 		self.ComplexPlane = comp
 
-	#def MultRootFindC(self):
+	def Newton(self,z,R1,R2,U0,C0):
+		m = self.m
+		omega = self.omega
+		D0 = self.D0[0]
+		invZ1 = self.invZ1
+		invZ2 = self.invZ2
+		F = self.F
+		dir_coeff = self.dir_coeff
+		#maxit = self.maxit
+		maxit = 10
+		tol = self.tol
+	
 
-	def BesEqn(self,z,R1,R2):
+		j=0
+		while(j<maxit-1):
+
+			f = self.BesEqn(D0,R1,R2,U0,C0,z,dir_coeff)
+			df = self.dBesEqn(D0,R1,R2,U0,C0,z,dir_coeff)
+			z = z - f/df	
+				
+
+			a = abs(f)
+			if(a < tol):
+				#print("Newton algorithm converged\n")
+				result = [1,z]
+				break									
+			j=j+1
+
+			if(j == maxit-1):
+				#print("Newton algorithm didn't converge\n")
+				result = [0,0]
+		return result		
+
+		#exit()		
+
+	def MultRootFindC(self):
+		D0 = self.D0[0]
+		R1 = self.R1[0]
+		R2 = self.R2[0]
+		U0 = 0 # This is to ensure that we first find the F=0 mode
+		C0 = self.C0[0]
+		
+		z = self.ComplexPlane
+		dir_coeff = self.dir_coeff
+
+		B = self.BesEqn(D0,R1,R2,U0,C0,z,dir_coeff)
+
+		Br = np.real(B)
+		Bi = np.imag(B)
+
+		N = self.n
+		alpha = np.zeros(0,dtype=complex)
+
+		count = 0;
+		j = 0;
+
+		while( j < N-1 ):     #Loop through rows
+			k = 0;
+			while( k < N-1 ):  #Loop through columns
+				if( Br[j,k] < 0 and Br[j,k+1] > 0 ) or ( Br[j,k] > 0 and Br[j,k+1] < 0 ): 
+					z1=z[j,k];
+					test = self.Newton(z1,R1,R2,U0,C0)	
+					if(test[0] == 1):
+						alpha = np.append(alpha,test[1])
+				elif( Br[j,k] > 0 and Br[j+1,k] < 0 ) or ( Br[j,k] < 0 and Br[j+1,k] > 0 ): 
+					z1=z[j,k];
+					test = self.Newton(z1,R1,R2,U0,C0)	
+					if(test[0] == 1):
+						alpha = np.append(alpha,test[1])
+				elif( Bi[j,k] < 0 and Bi[j,k+1] > 0 ) or ( Bi[j,k] > 0 and Bi[j,k+1] < 0 ): 
+					z1=z[j,k];
+					test = self.Newton(z1,R1,R2,U0,C0)	
+					if(test[0] == 1):
+						alpha = np.append(alpha,test[1])
+				elif( Bi[j,k] > 0 and Bi[j+1,k] < 0 ) or ( Bi[j,k] < 0 and Bi[j+1,k] > 0 ): 
+					z1=z[j,k];
+					test = self.Newton(z1,R1,R2,U0,C0)	
+					if(test[0] == 1):
+						alpha = np.append(alpha,test[1])
+
+				k=k+1
+			j=j+1
+
+		#print alpha
+
+		alpha = self.RootFilter(alpha)
+		print alpha
+
+		k = self.BesEqn(D0,R1,R2,U0,C0,alpha,dir_coeff)
+		print k			
+
+		# if (isempty(alpha)):
+		# 	fprintf('no roots found');
+		# 	alpha=[];
+
+	def RootFilter(self,alpha):
+		tol = self.tol
+		N = np.size(alpha)
+		j=0
+		while ( j < N ):
+			k = j+1
+			while(k<N):
+				diff = abs(alpha[j] - alpha[k])
+				if(diff < tol):
+					alpha[k] = 0
+				k = k+1	
+			j = j+1	
+		
+		t = np.where(alpha != 0)[0]
+		alpha1 = alpha[t]
+		return alpha1
+
+	def Riddlers(self,z1,z2,R1,R2,U0,C0):
+		m = self.m
+		omega = self.omega
+		D0 = self.D0[0]
+		invZ1 = self.invZ1
+		invZ2 = self.invZ2
+		F = self.F
+		dir_coeff = self.dir_coeff
 		maxit = self.maxit
 		tol = self.tol
-		gamma = self.gamma
+		#print(maxit)
+		#test = []
+
+
+		j=1
+		while(j<=maxit):
+			s = 0
+			f1 = self.BesEqn(D0,R1,R2,U0,C0,z1,dir_coeff)
+			f2 = self.BesEqn(D0,R1,R2,U0,C0,z2,dir_coeff)
+
+			if(np.real(f1-f2)<0):
+				s=-1
+			elif(np.real(f1-f2)==0):
+				s=0
+			else:
+				s=1
+
+			z3 = (z1+z2)/2
+			f3 = self.BesEqn(D0,R1,R2,U0,C0,z3,dir_coeff)
+			# Riddler's Algorithm
+			z4 = z3 + ((z3-z1)*s*f3)/(cmath.sqrt(f3*f3-f1*f2)); 
+
+			f4 = self.BesEqn(D0,R1,R2,U0,C0,z4,dir_coeff)
+			a =  abs(f4)
+			#exit()
+			print j
+			print a		
+
+			if(a < tol):
+				alpha = z4				
+				result = 1
+				print("Riddler's Algorithm Converged")
+				exit()
+				break	
+				
+			if((np.real(f1) < 0 and np.real(f4) < 0) or (np.real(f1) > 0 and np.real(f4) > 0) ):
+				z1 = z4
+				z2 = z2
+			else:
+				z1 = z1
+				z2 = z4
+
+			if(j == maxit):
+				#print("Riddlers did not converge")
+				alpha = z4				
+				result = 0
+				break
+				#test = [alpha,result]	
+
+			j = j+1
+		return [alpha,result]
+
+
+
+	def BesEqn(self,D0,R1,R2,U0,C0,z,dir_coeff):
+
+
+		maxit = self.maxit
+		tol = self.tol
 		m = self.m
 
-		J1 = special.jv(m, z*R1);
-		J1p1 = special.jv(m+1, z*R1);
-		J2 = special.jv(m, z*R2);
-		J2p1 = special.jv(m+1, z*R2);
+		# J1 = special.jv(m, z*R1)
+		# J1p1 = special.jv(m+1, z*R1)
+		# J2 = special.jv(m, z*R2);
+		# J2p1 = special.jv(m+1, z*R2)
 
-		if(R1 != 0):
-			Y1 = special.yv(m, z*R1);
-			Y1p1 = special.yv(m+1, z*R1);
+		# if(R1 != 0):
+		# 	Y1 = special.yv(m, z*R1)
+		# 	Y1p1 = special.yv(m+1, z*R1)
 		
-		Y2 = special.yv(m, z*R2);
-		Y2p1 = special.yv(m+1, z*R2);
+		# Y2 = special.yv(m, z*R2)
+		# Y2p1 = special.yv(m+1, z*R2)
+
+		
+		# zeta1 = self.zeta1(D0,R1,U0,C0,z,dir_coeff)
+		zeta2 = self.zeta2(D0,R2,U0,C0,z,dir_coeff)
+		
+		if(R1 == 0):
+			#y = -z*R2*J2p1 + (m-zeta2)*J2
+			y = z*R2*special.jvp(m,z*R2) - zeta2*special.jv(m,z*R2)
+
+		else:
+			ratio_top = (-z*R2*Y2p1 + (m-zeta2)*Y2)
+			ratio_bottom = (-z*R1*Y1p1 + (m+zeta1)*Y1)  # Need to double-check this line
+			ratio=ratio_top/ratio_bottom
+			y = -z*R2*J2p1 + (m-zeta2)*J2 - ratio*(-z*R1*J1p1 + (m+zeta1)*J1)
+
+		return y	
+
+	def dBesEqn(self,D0,R1,R2,U0,C0,z,dir_coeff):
+		maxit = self.maxit
+		tol = self.tol
+		#gamma = self.gamma
+		m = self.m		
+
+		J1 = special.jv(m, z*R1)
+		J1p1 = special.jv(m+1, z*R1)
+		J1p2 = special.jv(m+2, z*R1)
+
+		J2 = special.jv(m, z*R2)
+		J2p1 = special.jv(m+1, z*R2)
+		J2p2 = special.jv(m+2, z*R2)
+
+		Y1 = special.yv(m, z*R1)
+		Y1p1 = special.yv(m+1,z*R1)
+		Y1p2 = special.yv(m+2,z*R1)
+
+		Y2 = special.yv(m, z*R2)
+		Y2p1 = special.yv(m+1, z*R2)
+		Y2p2 = special.yv(m+2,z*R2)
+
+		if( R1 !=0 ):
+			dJ1 = (m/(z*R1))*J1 - J1p1
+			dY1 = (m/(z*R1))*Y1 - Y1p1
+			dJ1p1 = ((m+1)/(z*R1))*J1_p1 - J1p2
+			dY1p1 = ((m+1)/(z*R1))*Y1p1 - Y1p2
+			zeta1 = zeta1(D0,R1,U0,C0,z,dir_coeff)
+			dzeta1 = dZeta1(D0,R1,U0,C0,z,dir_coeff)
+
+
+		dJ2 = (m/(z*R2))*J2 - J2p1
+		dY2 = (m/(z*R2))*Y2 - Y2p1		
+		dJ2p1 = ((m+1)/(z*R2))*J2p1 - J2p2
+		dY2p1 = ((m+1)/(z*R2))*Y2p1 - Y2p2
+
+		zeta2 = self.zeta2(D0,R2,U0,C0,z,dir_coeff)
+		dzeta2 = self.dZeta2(D0,R2,U0,C0,z,dir_coeff)
+
+		if( R1==0 ):
+
+			j2 = (-z*R2*J2p1 + (m-zeta2)*J2)
+			dj2 = -R2*J2p1-z*math.pow(R2,2)*dJ2p1 + (m-zeta2)*R2*dJ2-dzeta2*J2
+			dy = dj2; 
+
+		else:
+
+			j1 = (-z*R1*J1p1 + (m+zeta1)*J1);  
+			j2 = (-z*R2*J2_p1 + (m-zeta2)*J2);
+			dj1 = -R1*J1p1-z*math.pow(R1,2)*dJ1p1 + (m+zeta1)*R1*dJ1+dzeta1*J1
+			dj2 = -R2*J2p1-z*math.pow(R2,2)*dJ2p1 + (m-zeta2)*R2*dJ2-dzeta2*J2
+
+			y1 = (-z*R1*Y1p1 + (m+zeta1)*Y1) 
+			y2 = (-z*R2*Y2_p1 + (m-zeta2)*Y2)
+			dy1 = -R1*Y1p1-z*math.pow(R1,2)*dY1_p1 + (m+zeta1)*R1*dY1+dzeta1*Y1
+			dy2 = -R2*Y2p1-z*math.pow(R2,2)*dY2_p1 + (m-zeta2)*R2*dY2-dzeta2*Y2
+
+			a = y2/y1
+			b = dy2/y1
+			c = y2*dy1/(y1*y1);
+			dy = (dj2-b*j1 + c*j1-a*dj1)
+
+		return dy
+
+
+
+
+			
+
+	# Need to check that this all works when dir_coeff = -1
+	
+	def sigma(self,U0,C0,alpha,dir_coeff):
+		omega = self.omega
+		alpha_squared = np.power(alpha,2)
+		k = (math.pow(C0,2) - math.pow(U0,2))/math.pow(omega,2)
+		k_alpha = k*alpha_squared
+		sigma = dir_coeff*np.sqrt(1-k_alpha)
+		return sigma
+
+	def mu(self,U0,C0,alpha,dir_coeff):
+		omega=self.omega
+		sigma = self.sigma(U0,C0,alpha,dir_coeff)
+		k = omega/(math.pow(C0,2) - math.pow(U0,2))
+		mu = k*(C0*sigma - U0)	
+		return mu
+
+	def zeta1(self,D0,R1,U0,C0,alpha,dir_coeff):
+		omega = self.omega
+		invZ1 = self.invZ1
+		mu = self.mu(U0,C0,alpha,dir_coeff)
+		zeta1 = (-1j*D0*R1*invZ1/omega)*np.power((omega - mu*U0),2)
+		return zeta1
+
+	def zeta2(self,D0,R2,U0,C0,alpha,dir_coeff):
+		omega = self.omega
+		invZ2 = self.invZ2
+		mu = self.mu(U0,C0,alpha,dir_coeff)
+		zeta2 = (-1j*D0*R2*invZ2/omega)*np.power((omega - mu*U0),2)
+		return zeta2
+
+	def dZeta1(self,D0,R1,U0,C0,z,dir_coeff):
+		omega = self.omega
+		invZ1 = self.invZ1
+		numerator = -1j*C0*D0*R1*U0*z*invZ1
+		denominator = omega*cmath.sqrt(-C0*C0*z*z + U0*U0*z*z + omega*omega)
+		dZeta1 = dir_coeff*numerator/denominator
+		return dZeta1
+
+	def dZeta2(self,D0,R2,U0,C0,z,dir_coeff):
+		omega = self.omega
+		invZ2 = self.invZ2
+		numerator = -1j*C0*D0*R2*U0*z*invZ2
+		denominator = omega*cmath.sqrt(-C0*C0*z*z + U0*U0*z*z + omega*omega)
+		dZeta2 = dir_coeff*numerator/denominator
+		return dZeta2			
 
 
 
@@ -210,5 +525,17 @@ class Eigensolver:
 
 		fig.savefig("MeanFlow.png")
 		plt.show()
+
+	def PlotContour(self):
+		x = np.real(z[0,:])
+		y = np.imag(z[:,0])
+		X, Y = np.meshgrid(x,y)
+		absB = abs(B)
+		#levels = [0,0.000001,0.00001,0.0001,0.001,0.01,0.1,1]	
+		levels = np.linspace(0,1,10)
+
+		plt.contour(X,Y,absB,levels)
+		plt.show()
+
 
 		

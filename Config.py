@@ -17,6 +17,7 @@ class Config:
 		
 		# Mass Flow Rate
 		self.F = 0.559
+		#self.F = 0
 		
 		# Needs changing depending on the problem geometry
 		self.E = 2.514
@@ -27,8 +28,9 @@ class Config:
 
 	def AcousticField(self):	
 	
-		self.Z1 = 10^6
-		self.Z2 = 2-1j
+		self.invZ1 = 0
+		self.invZ2 = 1/(2-1j)
+
 		self.m = 26
 		self.omega = 25
 
@@ -54,16 +56,18 @@ class Config:
 	def Computations(self):	
 	
 		self.maxit = 100
-		self.tol = math.pow(10,-6)
+		self.tol = math.pow(10,-12)
 
 	def ComplexPlane(self):
 
 
 		# Defines the max/min of the complex plane
-		self.mod_z_max = 3
+		self.mod_z_max = 10
 
 		# Used for the number of points in the complex plane
-		self.n = 60
+		self.n = 20
+		self.xshift = 35
+		self.yshift = 0
 
 
    	

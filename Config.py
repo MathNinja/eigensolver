@@ -1,4 +1,5 @@
 import math   
+import numpy as np
 
 class Config:
 
@@ -10,6 +11,23 @@ class Config:
  		self.Grid()	
  		self.Plots()
  		self.ComplexPlane()
+ 		self.Preliminaries()
+ 		self.R1()
+ 		self.R2()
+
+	def R1(self):
+		x = self.x
+		R1 = 0.689 - np.power((0.055+1.131*np.power((1-x/2),2)),0.5)
+		# # Set negative entries equal to zero.
+		R1[ R1 < 0 ] = 0 
+		#R1 [ R1 > 0] = 0 
+
+		self.R1 = R1
+
+	def R2(self):
+		x = self.x		
+		self.R2 = 1.073-0.198*np.power((1-x/2),2) + 0.109*np.exp(-11*x/2)	
+ 		
 
  	def MeanFlow(self):
 		
@@ -68,6 +86,19 @@ class Config:
 		self.n = 20
 		self.xshift = 35
 		self.yshift = 0
+
+	def Preliminaries(self):
+		xmin = self.xmin
+		xmax = self.xmax
+		NNxx = self.NNxx
+
+		# The increment/step for the initial modetracer (i.e., starting from F = 0)	
+		self.dF = np.sign(self.F)*(0.01)
+
+		# Set up the x stations
+		self.x = np.linspace(xmin,xmax,NNxx)
+		self.DeltaX = (xmax-xmin)/NNxx		
+
 
 
    	

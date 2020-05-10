@@ -4,8 +4,11 @@ import matplotlib.cm as cm
 import numpy as np
 import numpy.matlib
 import math, cmath
-from Config import Config
 from scipy import special
+
+# Custom classes
+from Config import Config
+from MeanFlow import MeanFlow
 
 
 class Eigensolver:
@@ -13,19 +16,24 @@ class Eigensolver:
 	def __init__(self):
 		
 		self.Configure()
-		self.Preliminaries()
-		self.R1()
-		self.R2()
-		self.MeanFlow();
+		#self.Preliminaries()
+
+		# Mean Flow
+		self.ComputeMeanFlow()
+
 		#self.Plots()
 		#self.PlotTheMeanFlow()
 		self.CreateComplexPlane()
 		self.MultRootFindC()
+		self.WhichAlpha()
+		self.ModeTracer()
 
 	def Configure(self):
 		
 		self.config 			= Config()
-		
+
+		self.R1					= self.config.R1
+		self.R2					= self.config.R2		
 		self.dens0 				= self.config.dens0
 		self.F 					= self.config.F
 		self.E 					= self.config.E
@@ -50,97 +58,109 @@ class Eigensolver:
 		self.tol 				= self.config.tol
 		self.mod_z_max 			= self.config.mod_z_max
 		self.n 					= self.config.n
-		self.xshift				=self.config.xshift
-		self.yshift				=self.config.yshift
+		self.xshift				= self.config.xshift
+		self.yshift				= self.config.yshift
 		self.xmin 				= self.config.xmin
-		self.xmax 				= self.config.xmax	
-	
-	def Preliminaries(self):
-		F  = self.F
-		xmin = self.xmin
-		xmax = self.xmax
-		NNxx = self.NNxx
+		self.xmax 				= self.config.xmax
+		self.dF					= self.config.dF
+		self.x					= self.config.x
+		self.DeltaX				= self.config.DeltaX
 
-		# The increment/step for the initial modetracer (i.e., starting from F = 0)	
-		self.dF = np.sign(F)*(0.01)
-
-		# Set up the x stations
-		
-		self.x = np.linspace(xmin,xmax,NNxx)
-		self.DeltaX = (xmax-xmin)/NNxx
-
-	def R1(self):
-		x = self.x
-		R1 = 0.689 - np.power((0.055+1.131*np.power((1-x/2),2)),0.5)
-		# # Set negative entries equal to zero.
-		R1[ R1 < 0 ] = 0 
-		#R1 [ R1 > 0] = 0 
-
-		self.R1 = R1
-
-	def R2(self):
-		x = self.x		
-		self.R2 = 1.073-0.198*np.power((1-x/2),2) + 0.109*np.exp(-11*x/2)	
 	
 
-	def MeanFlow(self):
-		N = self.NNxx
-		F = self.F
-		E = self.E
-		R1 = self.R1
-		R2 = self.R2
-		maxit = self.maxit
-		tol = self.tol
-		dens0 = self.dens0
-		gamma = self.gamma	
+	def ComputeMeanFlow(self):
 
-		D0 = np.zeros(shape=(N,),dtype=float)
-		U0 = np.zeros(shape=(N,),dtype=float)
-		C0 = np.zeros(shape=(N,),dtype=float)
-		d0 = np.zeros(shape=(maxit,),dtype=float)
-		d0[0] = dens0
-		
-		k = 0
-		while (k < N):
-			j = 0
-			beta = 0.5*math.pow(F,2)/math.pow((math.pow(R2[k],2)-math.pow(R1[k],2)),2);
-			while( j < maxit - 1 ):
+		MF = MeanFlow()
+		self.D0 = MF.D0
+		self.U0 = MF.U0
+		self.C0 = MF.C0
+		self.P0 = MF.P0
+		self.Mach0 = MF.Mach0
+
+
+
 			
-				f = beta*math.pow(d0[j],-2) + (1/(gamma-1))*math.pow(d0[j],gamma-1) - E
-				df = -2*beta*math.pow(d0[j],-3)	+ math.pow(d0[j],gamma-2)
+	
 
-				# Newton's Method	
-				d0[j+1] = d0[j] - f/df
+	# def ComputeMeanFlowDensity(self):
+	# 	N = self.NNxx
+	# 	F = self.F
+	# 	E = self.E
+	# 	R1 = self.R1
+	# 	R2 = self.R2
+	# 	maxit = self.maxit
+	# 	tol = self.tol
+	# 	dens0 = self.dens0
+	# 	gamma = self.gamma	
+	# 	D0 = np.zeros(shape=(N,),dtype=float)
+	# 	d0 = np.zeros(shape=(maxit,),dtype=float)
+	# 	d0[0] = dens0
+		
+	# 	k = 0
+	# 	while (k < N):
+	# 		j = 0
+	# 		beta = 0.5*math.pow(F,2)/math.pow((math.pow(R2[k],2)-math.pow(R1[k],2)),2);
+	# 		while( j < maxit - 1 ):
+			
+	# 			f = beta*math.pow(d0[j],-2) + (1/(gamma-1))*math.pow(d0[j],gamma-1) - E
+	# 			df = -2*beta*math.pow(d0[j],-3)	+ math.pow(d0[j],gamma-2)
+
+	# 			# Newton's Method	
+	# 			d0[j+1] = d0[j] - f/df
 					
-				a = abs(d0[j+1]-d0[j])
+	# 			a = abs(d0[j+1]-d0[j])
 
-				if(a < tol):
-					#print("Newton Algorithm Converged")
-					D0[k] = d0[j+1]
-					d0 = np.zeros(shape=(maxit,),dtype=float)
-					d0[0] = D0[k]
-					break
-				if(j==maxit-2):
-					print("Newton Algorithm Failed to Converge")	
-				j = j + 1	
+	# 			if(a < tol):
+	# 				#print("Newton Algorithm Converged")
+	# 				D0[k] = d0[j+1]
+	# 				d0 = np.zeros(shape=(maxit,),dtype=float)
+	# 				d0[0] = D0[k]
+	# 				break
+	# 			if(j==maxit-2):
+	# 				print("Newton Algorithm Failed to Converge")	
+	# 			j = j + 1	
 			
-			k=k+1
-
+	# 		k=k+1
+		
+	# 	self.D0 = D0
+		
 		
 
-		U0denominator = np.power(R2,2) - np.power(R1,2)
-		U0denominator = U0denominator*np.multiply(D0,U0denominator)
-		
-		U0 = np.divide(F,U0denominator)
-		C0 = np.power(D0,(gamma-1)/2)
-		Mach0 = np.divide(U0,C0)
-		P0 = np.multiply(1/gamma,np.power(D0,gamma))
+	# def ComputeMeanFlowAxialVelocity(self):
+	# 	N = self.NNxx
+	# 	R1 = self.R1
+	# 	R2 = self.R2
+	# 	F = self.F
+	# 	D0 = self.D0
+	# 	U0 = np.zeros(shape=(N,),dtype=float)
+	# 	U0denominator = np.power(R2,2) - np.power(R1,2)
+	# 	U0denominator = U0denominator*np.multiply(D0,U0denominator)
+	# 	U0 = np.divide(F,U0denominator)	
+	# 	self.U0 = U0	
 
-		self.D0 = D0
-		self.U0 = U0
-		self.C0 = C0
-		self.Mach0 = Mach0
-		self.P0 = P0
+
+	# def ComputeMeanFlowSoundSpeed(self):
+	# 	N = self.NNxx
+	# 	D0 = self.D0
+	# 	gamma = self.gamma
+	# 	C0 = np.zeros(shape=(N,),dtype=float)
+	# 	C0 = np.power(D0,(gamma-1)/2)
+	# 	self.C0 = C0
+	
+
+	# def ComputeMeanFlowMachNumber(self):
+	# 	U0 = self.U0
+	# 	C0 = self.C0
+	# 	Mach0 = np.divide(U0,C0)
+	# 	self.Mach0 = Mach0
+
+	
+	# def ComputeMeanFlowPressure(self):
+	# 	gamma = self.gamma
+	# 	D0 = self.D0
+	# 	P0 = np.multiply(1/gamma,np.power(D0,gamma))
+	# 	self.P0 = P0	
+
 
 	def CreateComplexPlane(self):
 		mod_z_max = self.mod_z_max
@@ -156,8 +176,7 @@ class Eigensolver:
 
 		imag = np.transpose(imag)
 		imag = np.multiply(1j,imag)
-		#print imag
-		#exit()
+
 		
 		comp = np.zeros((n,n),dtype=complex)
 		comp = real + imag 
@@ -183,7 +202,6 @@ class Eigensolver:
 			f = self.BesEqn(D0,R1,R2,U0,C0,z,dir_coeff)
 			df = self.dBesEqn(D0,R1,R2,U0,C0,z,dir_coeff)
 			z = z - f/df	
-				
 
 			a = abs(f)
 			if(a < tol):
@@ -198,6 +216,68 @@ class Eigensolver:
 		return result		
 
 		#exit()		
+
+	def ModeTracer(self):
+		#MultRootFindc computes the whereabouts of some the coalesed modes (F=0). We take one of these and trace its progress along the inlet for increasing F. This ensures that we're looking at the same mode (one forward running and one backward running) for F \neq 0.   
+
+		# Sets initial value of alpha equal to the initial modal value (i.e. the calculated mode for F=0)
+
+		alpha_init = self.alpha_init 
+		dF = self.dF
+
+		alpha = np.zeros(0,dtype=complex)
+		alpha =  np.append(alpha, alpha_init) 
+		
+		# Set the initial mass flow condition	
+		F=0 
+		j = 1
+		
+		#count=1;  We have started our array of results alpha with the initial calculated value, and so our 1st point of interest is the second element of this array
+		while(j):
+			F=F+dF
+			break
+		# 	if(j==1): 
+		# 		z1=alpha(j);
+		# 		alpha(j+1)=alpha(j) + inc;
+		# 		z2=alpha(j+1);
+		# 		test=riddlers(z1, z2, maxIt, tol, R1, R2, m,omega,D0,invZ1,invZ2,F,dir_coeff);
+		
+		# if(test(2)==1) % Test for convergence
+		# 	alpha(count+1)=test(1);
+		# 	count=count+1;
+		# end
+	
+	#else
+			
+# 			test=Newton(z,R1,R2,U0,C0)
+	
+# 		if(test(2)==1) % Test for convergence
+# 			alpha(count+1)=test(1);
+# 			count=count+1;
+# 		end
+		
+# 	end
+	
+# 	if(F>maxF) %Breaks from loop if F lies outside our region of interest
+# 		break;
+# 	end
+# j=j+1;
+# end
+
+# if (isempty(alpha))
+#     fprintf('no roots found');
+#     [alpha]=[];
+# end
+
+
+
+
+	def WhichAlpha(self):
+		# Specifies which eigenvalue in the alpha_array to track
+		alpha = 1
+		self.alpha_init = self.alpha_array[alpha]
+		print("Tracking Eigenvalue: " + str(self.alpha_init))
+
 
 	def MultRootFindC(self):
 		D0 = self.D0[0]
@@ -250,10 +330,12 @@ class Eigensolver:
 		#print alpha
 
 		alpha = self.RootFilter(alpha)
+		print "Cross-Sectional Eigenvalues Found"
 		print alpha
+		self.alpha_array = alpha
 
-		k = self.BesEqn(D0,R1,R2,U0,C0,alpha,dir_coeff)
-		print k			
+		#k = self.BesEqn(D0,R1,R2,U0,C0,alpha,dir_coeff)
+		#print k			
 
 		# if (isempty(alpha)):
 		# 	fprintf('no roots found');
